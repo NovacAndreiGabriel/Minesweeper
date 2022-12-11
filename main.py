@@ -5,6 +5,7 @@ import os
 from cells.empty import Empty
 from cells.number import Number
 from cells.mine import Mine 
+from flag import Flag
 
 NUMBER_OF_ROWS = 9
 NUMBER_OF_COLUMNS = 9
@@ -34,13 +35,14 @@ COLORS_OF_NUMBERS = {
     8 : COLORS["DARK_GRAY"],
 }
 
-WIDTH = 540
-HEIGHT = 540
+WIDTH = 450
+HEIGHT = 450
 
 CELL_WIDTH = int(WIDTH / NUMBER_OF_COLUMNS)
 CELL_HEIGHT = int(HEIGHT / NUMBER_OF_ROWS)
 
 grid = []
+flags = []
 
 def indexInRange(row, column, numberOfRows, numberOfColumns):
     if row in range(0, numberOfRows) and column in range(0, numberOfColumns):
@@ -133,9 +135,16 @@ def reveal(cell):
                 if indexInRange(row, column, len(grid), len(grid[0])):
                     if not isinstance(cell, Mine) and not grid[row][column].visible:
                         reveal(grid[row][column])               
-    
+
+def findFlag(flags, row, column):
+    for flag in flags:
+        if flag.row == row and flag.column == column:
+            return flag
+    return None
+
 def main():
     global grid
+    global flags
     createGrid(NUMBER_OF_ROWS, NUMBER_OF_COLUMNS, NUMBER_OF_MINES)
     grid = getGridFromFile("minesweeper.txt")
     
@@ -151,17 +160,32 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONUP:
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mousePosition = pygame.mouse.get_pos()
                 cellRow = mousePosition[1] // CELL_HEIGHT
                 cellColumn = mousePosition[0] // CELL_WIDTH
-                reveal(grid[cellRow][cellColumn])
+                if not grid[cellRow][cellColumn].flagOn:
+                    reveal(grid[cellRow][cellColumn])
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
+                mousePosition = pygame.mouse.get_pos()
+                cellRow = mousePosition[1] // CELL_HEIGHT
+                cellColumn = mousePosition[0] // CELL_WIDTH
+                if grid[cellRow][cellColumn].flagOn:
+                    grid[cellRow][cellColumn].flagOn = False
+                    index = -1
+                    for flag in flags:
+                        if flag.row == cellRow and flag.column == cellColumn:
+                            index = flags.index(flag)
+                    if index!= -1:
+                        del flags[index]
+                else:
+                    grid[cellRow][cellColumn].flagOn = True
+                    flags.append(Flag(cellRow, cellColumn, CELL_WIDTH, CELL_HEIGHT))
                 
         for row in grid:
             for cell in row:
                 outsideRectangle = pygame.Rect(cell.x, cell.y, CELL_WIDTH, CELL_HEIGHT)
                 insideRectangle = pygame.Rect(cell.x + 1, cell.y + 1, CELL_WIDTH - 2, CELL_HEIGHT - 2)
-                
                 pygame.draw.rect(screen, COLORS["WHITE"], outsideRectangle)
                 if cell.visible == True:
                     pygame.draw.rect(screen, COLORS["LIGHT_GRAY"], insideRectangle)
@@ -169,13 +193,29 @@ def main():
                         pygame.draw.circle(screen, COLORS["BLACK"], (outsideRectangle.centerx, outsideRectangle.centery), int(outsideRectangle.width / 4))
                         pygame.draw.circle(screen, COLORS["DARK_GRAY"], (insideRectangle.centerx, insideRectangle.centery), int(insideRectangle.width / 4 - 2))
                     elif isinstance(cell, Number):
-                        font = pygame.font.SysFont("arial", CELL_HEIGHT)
+                        font = pygame.font.SysFont("arial", int(4 * CELL_HEIGHT / 5))
                         text = font.render(str(cell.value), True, COLORS_OF_NUMBERS[cell.value])
-                        screen.blit(text, (cell.x + 12, cell.y - 4))
+                        screen.blit(text, (cell.x + 15, cell.y + 1))
                 else:
-                    pygame.draw.rect(screen, COLORS["DARK_GRAY"], insideRectangle)
-        pygame.display.update()
-                
+                    if cell.flagOn:
+                        pygame.draw.rect(screen, COLORS["DARK_GRAY"], insideRectangle)
+                        flag = findFlag(flags, cell.row, cell.column)
+                        pygame.draw.rect(screen, COLORS["BLACK"], pygame.Rect(flag.stickRectangleX, flag.stickRectangleY, flag.stickRectangleWidth, flag.stickRectangleHeight))
+                        pygame.draw.polygon(screen, COLORS["LIGHT_GRAY"], [flag.clothTrianglePoints[0], flag.clothTrianglePoints[1], flag.clothTrianglePoints[2]])
+                        pygame.draw.line(screen, COLORS["BLACK"], flag.clothTrianglePoints[0], flag.clothTrianglePoints[1])
+                        pygame.draw.line(screen, COLORS["BLACK"], flag.clothTrianglePoints[1], flag.clothTrianglePoints[2])
+                        pygame.draw.line(screen, COLORS["BLACK"], flag.clothTrianglePoints[2], flag.clothTrianglePoints[0])
+                    else:    
+                        pygame.draw.rect(screen, COLORS["DARK_GRAY"], insideRectangle)
+                        
+        if len(flags) == NUMBER_OF_MINES:
+            check = True
+            for flag in flags:
+                if not isinstance(grid[flag.row][flag.column], Mine):
+                    check = False
+            if check == True:
+                screen.fill(COLORS["LIGHT_GRAY"])
+        pygame.display.update()                
     pygame.quit()
                 
 if __name__ == "__main__":
